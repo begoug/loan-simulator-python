@@ -71,8 +71,12 @@ class Investment:
     def addLoan(self,loan):
         self.loans.append(loan)
 
-    def addProperty(self,realProperty):
-        self.properties.append(realProperty)
+    def addProperty(self,property_):
+        self.properties.append(property_)
+
+    def addProperties(self,properties):
+        for property_ in properties:
+            self.addProperty(property_)
 
     def addFiscality(self,fiscality):
         self.fiscalities.append(fiscality)

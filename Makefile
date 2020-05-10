@@ -1,8 +1,9 @@
+default: all
 all:build install_user
 
 .PHONY:build
 build:
-	python3.7 setup.py bdist_wheel
+	cd src && python setup.py bdist_wheel
 
 install_user:
-	pip3.7 install --user --upgrade dist/*.whl
+	cd src && pip install --user --upgrade dist/*.whl && cp dist/* versions && rm -f dist/*
