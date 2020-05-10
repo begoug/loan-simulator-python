@@ -25,11 +25,11 @@ class Investment:
             for i_disb,disbursment in enumerate(disbursments):
                 currDisbPmt  = disbursment['pmt']
                 currDisbName = disbursment['name']
-                currDisbTerm = disbursment['termM']
+                currDisbTerm = disbursment['mterm']
                 # if we have access to contribution, use it
                 if contribLeft >0.:
                     contribPmt = min(contribLeft,currDisbPmt)
-                    contribDisb.append({'name':currDisbName , 'pmt':contribPmt  , 'termM':currDisbTerm})
+                    contribDisb.append({'name':currDisbName , 'pmt':contribPmt  , 'mterm':currDisbTerm})
                     contribLeft -= contribPmt
                     currDisbPmt -= contribPmt
                 # if the contribution was not enough, currDisbPmt is greater than 0
@@ -44,9 +44,9 @@ class Investment:
                     #        compute the current loan and move to the next one
                     #        do so as long as the amount left of the current disbursment is higher than the loan's prncipal
                     if princLeft>= currDisbPmt:
-                        localDisb.append({'name':currDisbName,'pmt':currDisbPmt,'termM':currDisbTerm})
+                        localDisb.append({'name':currDisbName,'pmt':currDisbPmt,'mterm':currDisbTerm})
                     else:
-                        localDisb.append({'name':currDisbName,'pmt':princLeft,'termM':currDisbTerm})
+                        localDisb.append({'name':currDisbName,'pmt':princLeft,'mterm':currDisbTerm})
                         self.loans[i_loan].computeMonthly(disbursments=localDisb)
                         currDisbPmt -= princLeft
                         # if the next loan is not enough, use as many as necessary
@@ -54,12 +54,12 @@ class Investment:
                         if i_loan<lastLoan:
                             while i_loan<lastLoan and currDisbPmt > self.loans[i_loan+1].principal:
                                 i_loan += 1
-                                localDisb = [{'name':currDisbName,'pmt':self.loans[i_loan].principal,'termM':currDisbTerm}]
+                                localDisb = [{'name':currDisbName,'pmt':self.loans[i_loan].principal,'mterm':currDisbTerm}]
                                 currDisbPmt -= self.loans[i_loan].principal
                                 self.loans[i_loan].computeMonthly(disbursments=localDisb)
                                 # at this point, loan i_loan has no principal left
                             i_loan += 1
-                            localDisb = [{'name':currDisbName,'pmt':currDisbPmt,'termM':currDisbTerm}]
+                            localDisb = [{'name':currDisbName,'pmt':currDisbPmt,'mterm':currDisbTerm}]
                     # if this was the last disbursment, compute the loan
                     if i_disb == lastDisb :
                         self.loans[i_loan].computeMonthly(disbursments=localDisb)
@@ -67,7 +67,7 @@ class Investment:
             for l in self.loans : l.computeMonthly()
     @property
     def termY(self): return max([l.termY for l in self.loans])
-    def termM(self): return max([l.termM for l in self.loans])
+    def mterm(self): return max([l.mterm for l in self.loans])
     def addLoan(self,loan):
         self.loans.append(loan)
 
