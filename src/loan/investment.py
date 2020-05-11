@@ -66,24 +66,49 @@ class Investment:
         else:
             for l in self.loans : l.computeMonthly()
     @property
-    def termY(self): return max([l.termY for l in self.loans])
-    def mterm(self): return max([l.mterm for l in self.loans])
-    def addLoan(self,loan):
+    def yterm(self):
+        """int: maximum term of loans in years """
+        return max([l.termY for l in self.loans])
+
+    @property
+    def mterm(self):
+        """int: maximum term of loans in months """
+        return max([l.mterm for l in self.loans])
+
+    def add_loan(self,loan):
+        """Adds a single loan to the list of loans
+        Parameters:
+        -----------
+        loan: `:obj:Loan`
+            The loan to be added to the project
+        """
         self.loans.append(loan)
 
-    def addProperty(self,property_):
+    def add_property(self,property_):
+        """Adds a single property to the list of properties
+        Parameters:
+        -----------
+        property_: `:obj:Estate`
+            The property to be added to the project
+        """
         self.properties.append(property_)
 
-    def addProperties(self,properties):
+    def add_properties(self,properties):
+        """Adds a several properties to the list of properties
+        Parameters:
+        -----------
+        properties: list of `:obj:Estate`
+            The properties to be added to the project
+        """
         for property_ in properties:
-            self.addProperty(property_)
+            self.add_property(property_)
 
     def addFiscality(self,fiscality):
         self.fiscalities.append(fiscality)
 
     @property
-    def acqCost(self):
-        return sum( [p.acqCost for p in self.properties] )
+    def net_price(self):
+        return sum( [p.net_price for p in self.properties] )
     @property
     def acqGrossCost(self):
         return sum( [p.acqGrossCost for p in self.properties] )
@@ -98,8 +123,9 @@ class Investment:
         return val
 
     @property
-    def costLeft(self):
-        return self.acqCost - self.funds
+    def price_left(self):
+        """float: acquisition cost left after all loans and contribution have been used"""
+        return self.net_price - self.funds
 
     def getLoanByName(self,name):
         return [l for l in self.loans if l.name == name][0]

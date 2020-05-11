@@ -71,7 +71,7 @@ class Estate:
         self.construction = construction
 
     @property
-    def full_price(self):
+    def net_price(self):
         price = 0.
         # gross price + fees
         for rate in [100., self.realtor_rate, self.notary_rate]:

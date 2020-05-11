@@ -1,6 +1,19 @@
 import numpy as np
 
 class Loan(object):
+    """Loan class manages loans
+
+    Parameters
+    ----------
+    yterm: int
+        Total length of loan
+    nominal_rate: float
+    principal: float
+    insurace: float
+    name: str
+    ydeff: int
+    compute_now: bool
+    """
     MONTHLY_KEYS = [
             'PMT', # total payment (principal+interests)
             'PPMT', # principal
@@ -10,22 +23,22 @@ class Loan(object):
     ]
     # CONVENTIONS FOR THIS CLASS:
     #    - month m is in 0..mtermtermnth 0 at beginning of loan)
-    def __init__(self,termY=None,nominalRate=None,principal=None,insurance=None,name='',deffY=0, computeNow=True):
-        self.termY          = termY
-        self.mterm          = int(self.termY*12)
-        self.nominalRate    = nominalRate
+    def __init__(self, yterm=None, nominal_rate=None, principal=None, insurance=None, name='', ydeff=0, compute_now=True):
+        self.yterm = yterm
+        self.mterm = int(self.yterm*12)
+        self.nominal_rate = nominal_rate
         # actuariel
-        self.eff_rate  = ((1+self.nominalRate/100.)**(1./12.)-1)*100.
+        self.eff_rate  = ((1+self.nominal_rate/100.)**(1./12.)-1)*100.
         # proportionel
-        #self.eff_rate  = self.nominalRate/12.
+        #self.eff_rate  = self.nominal_rate/12.
         self.principal      = principal
         self.insurance      = insurance if insurance else 0.
         self.name  = name
-        self.deffM = int(deffY*12)
-        self.deffY = deffY
+        self.mdeff = int(ydeff*12)
+        self.ydeff = ydeff
         self.obtained = principal
         self._monthly_data = {}
-        if computeNow :
+        if compute_now :
             self.update_monthly_data()
     #@property
     #def PMT(self):
@@ -41,7 +54,7 @@ class Loan(object):
         """
         Pv   = self.principal
         rate    = self.eff_rate/100.
-        Nper = self.mterm-self.deffM
+        Nper = self.mterm-self.mdeff
         if rate>1e-8:
             PMT  = (Pv*rate)/(1.-(1.+rate)**(-Nper))
         else:
@@ -68,12 +81,12 @@ class Loan(object):
     def getCumulIns (self,month) : return self._cumulIns [min(month,self.mterm)]
 
     def update_monthly_data(self,disbursments=None):
-        disbursments = disbursments if disbursments else [{'pmt':self.principal , 'mterm':0}]
+        disbursments = disbursments if disbursments else [{'name': 'full loan', 'pmt':self.principal , 'mterm':0}]
         print('='*25+self.name + ' '+str(self.principal))
         print('\n'.join(['{name:<20}: {pmt:>15.2f} au mois numero {term:>3d}'.format(name=dec['name'],pmt=dec['pmt'],term=dec['mterm']) for dec in disbursments]))
         # prepare monthly payments and interests
-        for key in ['IPMT', 'PPMT', 'PMT', 'PLFT', 'INS']:
-            self._monthly_data[key] = np.zero(self.mterm+1)
+        for key in ['IPMT', 'PPMT', 'PMT', 'PLFT', 'INS', 'TPMT']:
+            self._monthly_data[key] = np.zeros(self.mterm+1)
         self._monthly_data['PLFT'][0] = self.principal
         # prepare variables:
         # * rate
@@ -87,7 +100,7 @@ class Loan(object):
             last_obtained = sum([disb['pmt'] for disb in disbursments if disb['mterm'] == month-1])
             # update obtained amount
             obtained += last_obtained
-            if month<=self.deffM:
+            if month<=self.mdeff:
                 interests = obtained * rate
                 payment = interests
                 principal = 0.
@@ -96,15 +109,16 @@ class Loan(object):
                 payment = self.cPMT(month)
                 principal = payment-interests
             left -= principal
-            self._monthly_data['INS'][month] = self.cInsFees(month)
+            insurance = self.cInsFees(month)
             #store
             self._monthly_data['PMT'][month] = payment
             self._monthly_data['IPMT'][month] = interests
             self._monthly_data['PPMT'][month] = principal
+            self._monthly_data['INS'][month] = insurance
+            self._monthly_data['TPMT'][month] = payment + insurance
             self._monthly_data['PLFT'][month] = left
             self._monthly_data['INS'][month] = self.cInsFees(month)
         # compute cumulative sums
-        self._totPMT    = [ self._insFees[month]+self._PMT[month] for month in range(self.mterm+1)]
-        for key in ['PPMT', 'IPMT', 'PMT', 'INS']:
+        for key in ['PPMT', 'IPMT', 'PMT', 'INS', 'TPMT']:
             self._monthly_data['cumul_'+key] = np.cumsum(self._monthly_data[key])
 
