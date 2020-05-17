@@ -23,7 +23,7 @@ class Loan(object):
     ]
     # CONVENTIONS FOR THIS CLASS:
     #    - month m is in 0..mtermtermnth 0 at beginning of loan)
-    def __init__(self, yterm=None, nominal_rate=None, principal=None, insurance=None, name='', ydeff=0, compute_now=True):
+    def __init__(self, yterm=None, nominal_rate=None, principal=None, ins_rate=None, name='', ydeff=0, compute_now=True):
         self.yterm = yterm
         self.mterm = int(self.yterm*12)
         self.nominal_rate = nominal_rate
@@ -32,7 +32,7 @@ class Loan(object):
         # proportionel
         #self.eff_rate  = self.nominal_rate/12.
         self.principal      = principal
-        self.insurance      = insurance if insurance else 0.
+        self.ins_rate      = ins_rate if ins_rate else 0.
         self.name  = name
         self.mdeff = int(ydeff*12)
         self.ydeff = ydeff
@@ -40,21 +40,53 @@ class Loan(object):
         self._monthly_data = {}
         if compute_now :
             self.update_monthly_data()
-    #@property
-    #def PMT(self):
-    #    try:
-    #        return self._PMT
-    #    except AttributeError:
-    #        Pv   = self.principal
-    #        rate    = self.rate
-    #        Nper = self.termMois
+
+    def get_monthly_data(self, key):
+        return self._monthly_data[key]
+
+    @property
+    def PMT(self):
+        return self.get_monthly_data('PMT')
+
+    @property
+    def PPMT(self):
+        return self.get_monthly_data('PPMT')
+
+    @property
+    def IPMT(self):
+        return self.get_monthly_data('IPMT')
+
+    @property
+    def TPMT(self):
+        return self.get_monthly_data('TPMT')
+
+    @property
+    def INS(self):
+        return self.get_monthly_data('INS')
+
+    @property
+    def PLFT(self):
+        return self.get_monthly_data('PLFT')
+
+    @property
+    def total_cost(self):
+     return self._monthly_data['cumul_IPMT'][-1] + self._monthly_data['cumul_INS'][-1]
+
+    @property
+    def total_ins(self):
+     return self._monthly_data['cumul_INS'][-1]
+
+    @property
+    def total_int(self):
+     return self._monthly_data['cumul_IPMT'][-1]
 
     def cPMT(self,month):
-        """Compute monthly payment of principal
+        """Computes monthly payment of principal
         """
         Pv   = self.principal
-        rate    = self.eff_rate/100.
+        rate = self.eff_rate/100.
         Nper = self.mterm-self.mdeff
+        print(f'Compute PMT: {Pv}, {rate}, {Nper}')
         if rate>1e-8:
             PMT  = (Pv*rate)/(1.-(1.+rate)**(-Nper))
         else:
@@ -62,31 +94,19 @@ class Loan(object):
         return PMT
 
     def cInsFees(self,month):
-        return self.insurance/float(self.mterm)
+        return self.ins_rate/100./12.*self.principal
+
     def cTotPMT(self,month):
         return self.cInsFees(month)+self.cPMT(month)
 
-    def getTotPMT   (self,month):
-        return self._totPMT[month] if month <=self.mterm else 0.
-    def getInsFees  (self,month):
-        return self._insFees  [month] if month <=self.mterm else 0.
-    def getPMT      (self,month):
-        return self._PMT[month] if month <=self.mterm else 0.
-    def getIPMT     (self,month) : return self._IPMT     [month] if month <=self.mterm else 0.
-    def getPPMT     (self,month) : return self._PPMT     [month] if month <=self.mterm else 0.
-    def getPleft    (self,month) : return self._Pleft    [month] if month <=self.mterm else 0.
-    def getCumulPPMT(self,month) : return self._cumulPPMT[min(month,self.mterm)]
-    def getCumulIPMT(self,month) : return self._cumulIPMT[min(month,self.mterm)]
-    def getCumulPMT (self,month) : return self._cumulPMT [min(month,self.mterm)]
-    def getCumulIns (self,month) : return self._cumulIns [min(month,self.mterm)]
-
-    def update_monthly_data(self,disbursments=None):
+    def update_monthly_data(self, disbursments=None, term=None):
+        term = term or self.mterm
         disbursments = disbursments if disbursments else [{'name': 'full loan', 'pmt':self.principal , 'mterm':0}]
-        print('='*25+self.name + ' '+str(self.principal))
-        print('\n'.join(['{name:<20}: {pmt:>15.2f} au mois numero {term:>3d}'.format(name=dec['name'],pmt=dec['pmt'],term=dec['mterm']) for dec in disbursments]))
+        #print('='*25+self.name + ' '+str(self.principal))
+        #print('\n'.join(['{name:<20}: {pmt:>15.2f} au mois numero {term:>3d}'.format(name=dec['name'],pmt=dec['pmt'],term=dec['mterm']) for dec in disbursments]))
         # prepare monthly payments and interests
         for key in ['IPMT', 'PPMT', 'PMT', 'PLFT', 'INS', 'TPMT']:
-            self._monthly_data[key] = np.zeros(self.mterm+1)
+            self._monthly_data[key] = np.zeros(term+1)
         self._monthly_data['PLFT'][0] = self.principal
         # prepare variables:
         # * rate
@@ -95,7 +115,8 @@ class Loan(object):
         rate  = self.eff_rate/100.
         obtained = 0.
         left = self.principal
-        for month in range(1,self.mterm+1):
+        # only fill out data for this month, if month is higher thant self.mterm, intialization to 0 is used
+        for month in range(1, self.mterm+1):
             # get all disbursments made the previous month
             last_obtained = sum([disb['pmt'] for disb in disbursments if disb['mterm'] == month-1])
             # update obtained amount

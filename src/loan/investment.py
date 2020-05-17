@@ -1,4 +1,5 @@
 # coding: utf-8
+import numpy as np
 class Investment:
     def __init__(self,contribution=None):
         self.loans       = []
@@ -9,11 +10,11 @@ class Investment:
         else:
             self.contribution = contribution
     @property
-    def hasContribution(self) :
+    def has_contribution(self) :
         return self.contribution > 0.
 
     def compute(self):
-        if self.properties[0].hasDisbursments:
+        if self.properties[0].has_disbursments:
             disbursments     = self.properties[0].disbursments
             i_loan           = 0
             lastLoan         = len(self.loans)-1
@@ -64,7 +65,7 @@ class Investment:
                     if i_disb == lastDisb :
                         self.loans[i_loan].computeMonthly(disbursments=localDisb)
         else:
-            for l in self.loans : l.computeMonthly()
+            for l in self.loans : l.update_monthly_data()
     @property
     def yterm(self):
         """int: maximum term of loans in years """
@@ -109,12 +110,13 @@ class Investment:
     @property
     def net_price(self):
         return sum( [p.net_price for p in self.properties] )
-    @property
-    def acqGrossCost(self):
-        return sum( [p.acqGrossCost for p in self.properties] )
 
-    def sellPrice(self,m):
-        return sum( [p.sellPrice(m) for p in self.properties] )
+    @property
+    def gross_price(self):
+        return sum( [p.gross_price for p in self.properties] )
+
+    def sell_price(self,m):
+        return sum( [p.sell_price(m) for p in self.properties] )
 
     @property
     def funds(self):
@@ -127,21 +129,42 @@ class Investment:
         """float: acquisition cost left after all loans and contribution have been used"""
         return self.net_price - self.funds
 
-    def getLoanByName(self,name):
+    def loan_by_name(self,name):
         return [l for l in self.loans if l.name == name][0]
+
     def fiscBalance(self,m):
         return sum( [f.balance(m) for  f in self.fiscalities] )
-    def insFees(self,m)  : return sum( [ l.getInsFees(m)   for l in self.loans] )
-    def PMT(self,m)      : return sum( [ l.getPMT(m)       for l in self.loans] )
-    def IPMT(self,m)     : return sum( [ l.getIPMT(m)      for l in self.loans] )
-    def totPMT(self,m)   : return sum( [ l.getTotPMT(m)    for l in self.loans] )
-    def cumulPPMT(self,m): return sum( [ l.getCumulPPMT(m) for l in self.loans] )
-    def cumulIPMT(self,m): return sum( [ l.getCumulIPMT(m) for l in self.loans] )
-    def cumulIns(self,m) : return sum( [ l.getCumulIns(m)  for l in self.loans] )
-    def leftCap(self,m):
-        return self.funds - self.cumulPPMT(m)
-    def propCost(self,m): return sum([p.monthlyCost(m) for p in self.properties])
-    def propRevenue(self,m):return sum([p.monthlyRevenue(m) for p in self.properties])
+
+    def get_monthly_data(self, key):
+        # create array of size (nb_loans, nb_months) and then sum over first axis
+        work_arr = np.stack([loan.get_monthly_data(key) for loan in self.loans], axis=0)
+        return np.sum(work_arr, axis=0)
+
+    @property
+    def PMT(self):
+        return self.get_monthly_data('PMT')
+
+    @property
+    def IPMT(self):
+        return self.get_monthly_data('IPMT')
+
+    @property
+    def PPMT(self):
+        return self.get_monthly_data('PPMT')
+
+    @property
+    def TPMT(self):
+        return self.get_monthly_data('TPMT')
+
+    @property
+    def INS(self):
+        return self.get_monthly_data('INS')
+
+    # == #def leftCap(self,m):
+    # == #    return self.funds - self.cumulPPMT(m)
+    # == #def propCost(self,m): return sum([p.monthlyCost(m) for p in self.properties])
+    # == #def propRevenue(self,m):return sum([p.monthlyRevenue(m) for p in self.properties])
+
     def balance(self,m):
         # property cost and revenue
         propCost    = 0.
@@ -154,6 +177,7 @@ class Investment:
         # fiscalities balance
         cumulFiscBalance    = sum( [ self.fiscBalance(n+1)    for n in range(m) ] )
         return propRevenue + self.sellPrice(m) - propCost - loanCost + cumulFiscBalance
-    def monthlyCost(self,m):
+
+    def monthly_cost(self,m):
         return self.totPMT(m) + self.propCost(m)
 
