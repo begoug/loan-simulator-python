@@ -41,6 +41,7 @@ class Estate:
         Amount invested in construction work
     """
     def __init__(self,
+            name = 'prop',
             gross_price=None,
             realtor_rate=0.0,
             notary_rate=0.0 ,
@@ -66,9 +67,10 @@ class Estate:
         self.use = use
         self.yearly_fees = yearly_fees
         self.has_disbursments = disbursments is not None
-        self._disbursments = disbursments
+        self._disbursments = disbursments or []
         self.delivery = int(delivery*12)
         self.construction = construction
+        self.name = name
 
     @property
     def net_price(self):
@@ -82,7 +84,7 @@ class Estate:
     def disbursments(self):
         out=[]
         for i,disb in enumerate(self._disbursments):
-            out.append({'name':disb['name'],'mterm':disb['mterm']});
+            out.append({'name':self.name+':'+disb['name'],'mterm':disb['mterm']});
             pmt = self.gross_price *disb['rate']/100.
             if i == 0:pmt += self.gross_price*(self.realtor_rate+self.notary_rate)/100.
             out[-1].update({'pmt':pmt})

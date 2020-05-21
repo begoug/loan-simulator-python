@@ -2,6 +2,9 @@
 import numpy as np
 class Investment:
     def __init__(self,contribution=None):
+        self._yields = {}
+        self._monthly_cashflow = None
+        self._monthly_estate_net_revenue = None
         self.loans       = []
         self.properties  = []
         self.fiscalities = []
@@ -9,67 +12,90 @@ class Investment:
             self.contribution = 0.
         else:
             self.contribution = contribution
+
     @property
     def has_contribution(self) :
         return self.contribution > 0.
 
     def compute(self):
-        if self.properties[0].has_disbursments:
-            disbursments     = self.properties[0].disbursments
+        self.compute_payments()
+        self.compute_cashflow()
+        self.compute_estate_net_revenue()
+        self.compute_yields()
+
+    def compute_payments(self):
+        """Updates loans monthly data using properties disbursments
+
+        Loop
+        """
+        all_disbursments = sum([_.disbursments for _ in self.properties],[])
+        # concatenate disbursments of all properties
+        full_disbursments = []
+        for month in range(self.mterm):
+            names = []
+            curr_disb = {'pmt':0, 'name': '', 'mterm':month}
+            for disb in all_disbursments:
+                if disb['mterm'] == month:
+                    curr_disb['pmt'] += disb['pmt']
+                    names.append(curr_disb['name'])
+            if curr_disb['pmt'] > 0:
+                curr_disb['name'] = '+'.join(names)
+                full_disbursments.append(curr_disb)
+
+        if len(full_disbursments)>0:
             i_loan           = 0
             lastLoan         = len(self.loans)-1
             localDisb        = []
             contributionDisb = []
-            lastDisb         = len(disbursments)-1
-            contribDisb      = []
+            lastDisb         = len(full_disbursments)-1
             contribLeft      = self.contribution
-            for i_disb,disbursment in enumerate(disbursments):
-                currDisbPmt  = disbursment['pmt']
-                currDisbName = disbursment['name']
-                currDisbTerm = disbursment['mterm']
+            for i_disb,disbursment in enumerate(full_disbursments):
+                disb_pmt  = disbursment['pmt']
+                disb_name = disbursment['name']
+                disb_term = disbursment['mterm']
                 # if we have access to contribution, use it
                 if contribLeft >0.:
-                    contribPmt = min(contribLeft,currDisbPmt)
-                    contribDisb.append({'name':currDisbName , 'pmt':contribPmt  , 'mterm':currDisbTerm})
+                    contribPmt = min(contribLeft,disb_pmt)
                     contribLeft -= contribPmt
-                    currDisbPmt -= contribPmt
-                # if the contribution was not enough, currDisbPmt is greater than 0
-                if currDisbPmt>0.:
+                    disb_pmt -= contribPmt
+                # if the contribution was not enough, disb_pmt is greater than 0
+                if disb_pmt>0.:
                     # what we already added
                     totLocalDisb = sum([disb['pmt'] for disb in localDisb])
                     # what we can take from current loan : principal - (what we already added)
                     princLeft = self.loans[i_loan].principal - totLocalDisb
-                    if abs(currDisbPmt-princLeft)<1e-5:currDisbPmt = princLeft
+                    if abs(disb_pmt-princLeft)<1e-5:disb_pmt = princLeft
                     # if there is enough principal in the loan: add this disbursment
                     # else break the disbursment: one part in current loan, the rest in the next
                     #        compute the current loan and move to the next one
                     #        do so as long as the amount left of the current disbursment is higher than the loan's prncipal
-                    if princLeft>= currDisbPmt:
-                        localDisb.append({'name':currDisbName,'pmt':currDisbPmt,'mterm':currDisbTerm})
+                    if princLeft>= disb_pmt:
+                        localDisb.append({'name':disb_name,'pmt':disb_pmt,'mterm':disb_term})
                     else:
-                        localDisb.append({'name':currDisbName,'pmt':princLeft,'mterm':currDisbTerm})
-                        self.loans[i_loan].computeMonthly(disbursments=localDisb)
-                        currDisbPmt -= princLeft
+                        localDisb.append({'name':disb_name,'pmt':princLeft,'mterm':disb_term})
+                        self.loans[i_loan].update_monthly_data(disbursments=localDisb)
+                        disb_pmt -= princLeft
                         # if the next loan is not enough, use as many as necessary
                         #   in the end of this section, i_loan is the next loan that should be used
                         if i_loan<lastLoan:
-                            while i_loan<lastLoan and currDisbPmt > self.loans[i_loan+1].principal:
+                            while i_loan<lastLoan and disb_pmt > self.loans[i_loan+1].principal:
                                 i_loan += 1
-                                localDisb = [{'name':currDisbName,'pmt':self.loans[i_loan].principal,'mterm':currDisbTerm}]
-                                currDisbPmt -= self.loans[i_loan].principal
-                                self.loans[i_loan].computeMonthly(disbursments=localDisb)
+                                localDisb = [{'name':disb_name,'pmt':self.loans[i_loan].principal,'mterm':disb_term}]
+                                disb_pmt -= self.loans[i_loan].principal
+                                self.loans[i_loan].update_monthly_data(disbursments=localDisb)
                                 # at this point, loan i_loan has no principal left
                             i_loan += 1
-                            localDisb = [{'name':currDisbName,'pmt':currDisbPmt,'mterm':currDisbTerm}]
+                            localDisb = [{'name':disb_name,'pmt':disb_pmt,'mterm':disb_term}]
                     # if this was the last disbursment, compute the loan
                     if i_disb == lastDisb :
-                        self.loans[i_loan].computeMonthly(disbursments=localDisb)
+                        self.loans[i_loan].update_monthly_data(disbursments=localDisb)
         else:
             for l in self.loans : l.update_monthly_data()
+
     @property
     def yterm(self):
         """int: maximum term of loans in years """
-        return max([l.termY for l in self.loans])
+        return self.mterm//12
 
     @property
     def mterm(self):
@@ -160,24 +186,84 @@ class Investment:
     def INS(self):
         return self.get_monthly_data('INS')
 
+    @property
+    def cashflow(self):
+        return self._monthly_cashflow
+
+    @property
+    def estate_net_revenue(self):
+        return self._monthly_estate_revenue
+
+    def yield_(self, type_='net'):
+        return self._yields[type_]
+
+    def compute_cashflow(self):
+        cashflow = np.zeros(self.mterm+1)
+        for month in range(self.mterm+1):
+            for prop in self.properties:
+                cashflow[month] += prop.monthly_net_revenue(month)
+            for loan in self.loans:
+                cashflow[month] -= loan.TPMT[month]
+        self._monthly_cashflow = cashflow.copy()
+            
+    def compute_estate_net_revenue(self):
+        out = np.zeros(self.mterm+1)
+        for month in range(self.mterm+1):
+            for prop in self.properties:
+                out[month] += prop.monthly_net_revenue(month)
+        self._monthly_estate_revenue = out.copy()
+
+    def compute_yields(self):
+        net   = np.empty(self.yterm)
+        netnet= np.empty(self.yterm)
+        gross = np.empty(self.yterm)
+        # gross yield
+        operation_cost = self.gross_price
+        for year in range(self.yterm):
+            net_revenue = 0.
+            gross_revenue = 0.
+            total_payment = 0.
+            total_interests = 0.
+            loan_cost = 0.
+            fiscality = 0.
+            mstart = int(year*12.+1)
+            mstop = int(mstart+12-1)
+            for month in range(mstart, mstop):
+                for prop in self.properties:
+                    net_revenue += prop.monthly_net_revenue(month)
+                    gross_revenue += prop.monthly_gross_revenue(month)
+                for loan in self.loans:
+                    total_interests += loan.IPMT[month]
+                    total_payment += loan.TPMT[month]
+                    loan_cost += loan.IPMT[month] + loan.INS[month]
+            fiscality += (0.3+0.18)*gross_revenue
+            fiscality -= 0.3*total_interests
+            net[year] = (net_revenue -loan_cost)/operation_cost
+            netnet[year] = (net_revenue -loan_cost-fiscality)/operation_cost
+            gross[year] += gross_revenue/operation_cost
+        self._yields['net'] = net.copy()*100.
+        self._yields['gross'] = gross.copy()*100.
+        self._yields['netnet'] = netnet.copy()*100.
+        
+            
     # == #def leftCap(self,m):
     # == #    return self.funds - self.cumulPPMT(m)
     # == #def propCost(self,m): return sum([p.monthlyCost(m) for p in self.properties])
     # == #def propRevenue(self,m):return sum([p.monthlyRevenue(m) for p in self.properties])
 
-    def balance(self,m):
-        # property cost and revenue
-        propCost    = 0.
-        propRevenue = 0.
-        for p in self.properties:
-            propCost    += sum( [ p.monthlyCost(n+1)    for n in range(m) ] )
-            propRevenue += sum( [ p.monthlyRevenue(n+1) for n in range(m) ] )
-        # loan cost to reimbourse
-        loanCost =  self.cumulIPMT(m) + self.leftCap(m) + self.cumulIns(m)
-        # fiscalities balance
-        cumulFiscBalance    = sum( [ self.fiscBalance(n+1)    for n in range(m) ] )
-        return propRevenue + self.sellPrice(m) - propCost - loanCost + cumulFiscBalance
+    # == #def balance(self,m):
+    # == #    # property cost and revenue
+    # == #    propCost    = 0.
+    # == #    propRevenue = 0.
+    # == #    for p in self.properties:
+    # == #        propCost    += sum( [ p.monthlyCost(n+1)    for n in range(m) ] )
+    # == #        propRevenue += sum( [ p.monthlyRevenue(n+1) for n in range(m) ] )
+    # == #    # loan cost to reimbourse
+    # == #    loanCost =  self.cumulIPMT(m) + self.leftCap(m) + self.cumulIns(m)
+    # == #    # fiscalities balance
+    # == #    cumulFiscBalance    = sum( [ self.fiscBalance(n+1)    for n in range(m) ] )
+    # == #    return propRevenue + self.sellPrice(m) - propCost - loanCost + cumulFiscBalance
 
-    def monthly_cost(self,m):
-        return self.totPMT(m) + self.propCost(m)
+    # == #def monthly_cost(self,m):
+    # == #    return self.totPMT(m) + self.propCost(m)
 
