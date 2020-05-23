@@ -86,7 +86,7 @@ class Loan(object):
         Pv   = self.principal
         rate = self.eff_rate/100.
         Nper = self.mterm-self.mdeff
-        print(f'Compute PMT: {Pv}, {rate}, {Nper}')
+        #print(f'Compute PMT: {Pv}, {rate}, {Nper}')
         if rate>1e-8:
             PMT  = (Pv*rate)/(1.-(1.+rate)**(-Nper))
         else:

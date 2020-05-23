@@ -1,5 +1,6 @@
 # coding: utf-8
 import numpy as np
+from .fiscality import NoFiscality
 class Investment:
     def __init__(self,contribution=None):
         self._yields = {}
@@ -7,7 +8,7 @@ class Investment:
         self._monthly_estate_net_revenue = None
         self.loans       = []
         self.properties  = []
-        self.fiscalities = []
+        self.fiscality = NoFiscality()
         if not contribution:
             self.contribution = 0.
         else:
@@ -130,8 +131,8 @@ class Investment:
         for property_ in properties:
             self.add_property(property_)
 
-    def addFiscality(self,fiscality):
-        self.fiscalities.append(fiscality)
+    def add_fiscality(self,fiscality):
+        self.fiscality = fiscality
 
     @property
     def net_price(self):
@@ -157,9 +158,6 @@ class Investment:
 
     def loan_by_name(self,name):
         return [l for l in self.loans if l.name == name][0]
-
-    def fiscBalance(self,m):
-        return sum( [f.balance(m) for  f in self.fiscalities] )
 
     def get_monthly_data(self, key):
         # create array of size (nb_loans, nb_months) and then sum over first axis
@@ -214,56 +212,45 @@ class Investment:
         self._monthly_estate_revenue = out.copy()
 
     def compute_yields(self):
-        net   = np.empty(self.yterm)
-        netnet= np.empty(self.yterm)
-        gross = np.empty(self.yterm)
+        net   = np.empty(self.yterm+1)
+        netnet= np.empty(self.yterm+1)
+        gross = np.empty(self.yterm+1)
         # gross yield
         operation_cost = self.gross_price
-        for year in range(self.yterm):
+        for year in range(1,self.yterm+1):
             net_revenue = 0.
             gross_revenue = 0.
-            total_payment = 0.
-            total_interests = 0.
+            interests = 0.
+            loan_ins = 0.
+            rent_ins = 0.
+            prop_management = 0.
             loan_cost = 0.
             fiscality = 0.
-            mstart = int(year*12.+1)
+            mstart = int((year-1)*12.+1)
             mstop = int(mstart+12-1)
-            for month in range(mstart, mstop):
+            print(f'{year}: {mstart} -> {mstop}')
+            for month in range(mstart, mstop+1):
                 for prop in self.properties:
                     net_revenue += prop.monthly_net_revenue(month)
                     gross_revenue += prop.monthly_gross_revenue(month)
                 for loan in self.loans:
-                    total_interests += loan.IPMT[month]
-                    total_payment += loan.TPMT[month]
+                    interests += loan.IPMT[month]
+                    loan_ins += loan.INS[month]
                     loan_cost += loan.IPMT[month] + loan.INS[month]
-            fiscality += (0.3+0.18)*gross_revenue
-            fiscality -= 0.3*total_interests
-            net[year] = (net_revenue -loan_cost)/operation_cost
-            netnet[year] = (net_revenue -loan_cost-fiscality)/operation_cost
-            gross[year] += gross_revenue/operation_cost
+            print(f'============= {gross_revenue}')
+            fisc_data = {'gross_revenue'      : gross_revenue,
+                         'loan_interests'     : interests,
+                         'property_management': prop_management,
+                         'loan_insurance'     : loan_ins,
+                         'rent_insurance'     : rent_ins,
+                        }
+            taxes = self.fiscality.yearly_tax(**fisc_data)
+            gross[year]  = gross_revenue/operation_cost
+            net[year]    = (net_revenue-loan_cost)/operation_cost
+            netnet[year] = (net_revenue-loan_cost-taxes)/operation_cost
         self._yields['net'] = net.copy()*100.
         self._yields['gross'] = gross.copy()*100.
         self._yields['netnet'] = netnet.copy()*100.
+        for type_ in ['net', 'gross', 'netnet']:
+            self._yields[type_][0] = np.mean(self._yields[type_][1:])
         
-            
-    # == #def leftCap(self,m):
-    # == #    return self.funds - self.cumulPPMT(m)
-    # == #def propCost(self,m): return sum([p.monthlyCost(m) for p in self.properties])
-    # == #def propRevenue(self,m):return sum([p.monthlyRevenue(m) for p in self.properties])
-
-    # == #def balance(self,m):
-    # == #    # property cost and revenue
-    # == #    propCost    = 0.
-    # == #    propRevenue = 0.
-    # == #    for p in self.properties:
-    # == #        propCost    += sum( [ p.monthlyCost(n+1)    for n in range(m) ] )
-    # == #        propRevenue += sum( [ p.monthlyRevenue(n+1) for n in range(m) ] )
-    # == #    # loan cost to reimbourse
-    # == #    loanCost =  self.cumulIPMT(m) + self.leftCap(m) + self.cumulIns(m)
-    # == #    # fiscalities balance
-    # == #    cumulFiscBalance    = sum( [ self.fiscBalance(n+1)    for n in range(m) ] )
-    # == #    return propRevenue + self.sellPrice(m) - propCost - loanCost + cumulFiscBalance
-
-    # == #def monthly_cost(self,m):
-    # == #    return self.totPMT(m) + self.propCost(m)
-
